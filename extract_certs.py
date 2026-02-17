@@ -23,38 +23,26 @@ def download_metadata(url):
         sys.exit(1)
 
 def extract_certificates(xml_content):
-    """Extract all X509Certificate elements from the XML"""
-    print("Parsing XML and extracting certificates...")
-    
-    # Parse XML with namespace handling
+    """Extract X509Certificates from the IDPSSODescriptor (SAML 2.0) element only"""
+    print("Parsing XML and extracting certificates from IDPSSODescriptor...")
+
     root = ET.fromstring(xml_content)
-    
-    # Common namespaces in federation metadata
+
     namespaces = {
         'ds': 'http://www.w3.org/2000/09/xmldsig#',
-        'fed': 'http://docs.oasis-open.org/wsfed/federation/200706',
-        'md': 'urn:oasis:names:tc:SAML:2.0:protocol'
+        'md': 'urn:oasis:names:tc:SAML:2.0:metadata',
     }
-    
-    # Find all X509Certificate elements
+
+    # Find IDPSSODescriptor elements with SAML 2.0 protocol support
+    idp_descriptors = root.findall('.//md:IDPSSODescriptor', namespaces)
+
     certificates = []
-    
-    # Try multiple XPath expressions to find certificates
-    xpath_expressions = [
-        './/ds:X509Certificate',
-        './/{http://www.w3.org/2000/09/xmldsig#}X509Certificate',
-        './/X509Certificate'
-    ]
-    
-    for xpath in xpath_expressions:
-        try:
-            certs = root.findall(xpath, namespaces)
-            if certs:
-                certificates.extend(certs)
-                break
-        except:
-            continue
-    
+    for idp in idp_descriptors:
+        protocol = idp.get('protocolSupportEnumeration', '')
+        if 'urn:oasis:names:tc:SAML:2.0:protocol' in protocol:
+            certs = idp.findall('.//ds:X509Certificate', namespaces)
+            certificates.extend(certs)
+
     return certificates
 
 def format_as_pem(cert_data, cert_number):
