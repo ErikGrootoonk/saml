@@ -1,0 +1,19 @@
+openssl x509 -in certificate.pem -noout -subject -dates
+
+openssl x509 -in certificate.pem -noout -text
+
+# Subject only
+openssl x509 -in certificate.pem -noout -subject
+
+# Validity dates only
+openssl x509 -in certificate.pem -noout -startdate -enddate
+
+# Issuer
+openssl x509 -in certificate.pem -noout -issuer
+```
+
+Example output:
+```
+subject=CN=example.com, O=My Org, C=NL
+notBefore=Jan  1 00:00:00 2024 GMT
+notAfter=Jan  1 00:00:00 2025 GMT
