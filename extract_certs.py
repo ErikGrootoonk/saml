@@ -33,7 +33,7 @@ def extract_certificates(xml_content):
     namespaces = {
         'ds': 'http://www.w3.org/2000/09/xmldsig#',
         'fed': 'http://docs.oasis-open.org/wsfed/federation/200706',
-        'md': 'urn:oasis:names:tc:SAML:2.0:metadata'
+        'md': 'urn:oasis:names:tc:SAML:2.0:protocol'
     }
     
     # Find all X509Certificate elements
