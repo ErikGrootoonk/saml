@@ -8,6 +8,8 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import textwrap
 import sys
+import subprocess
+import shutil
 
 # Microsoft Federation Metadata URL
 METADATA_URL = "https://login.microsoftonline.com/common/federationmetadata/2007-06/federationmetadata.xml"
@@ -58,6 +60,24 @@ def format_as_pem(cert_data, cert_number):
     
     return pem
 
+REQUIRED_SUBJECT = "subject=CN=accounts.accesscontrol.windows.net"
+
+def get_cert_subject(pem_data):
+    """Get the subject of a PEM certificate using openssl"""
+    try:
+        result = subprocess.run(
+            ['openssl', 'x509', '-noout', '-subject'],
+            input=pem_data,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except FileNotFoundError:
+        print("Error: openssl is required but not found in PATH")
+        sys.exit(1)
+    return None
+
 def main():
     # Download metadata
     xml_content = download_metadata(METADATA_URL)
@@ -68,31 +88,46 @@ def main():
     if not certificates:
         print("No certificates found in the metadata!")
         sys.exit(1)
-    
+
     print(f"Found {len(certificates)} certificate(s)")
+    print(f"Filtering for: {REQUIRED_SUBJECT}")
     
-    # Save certificates
+    # Filter and save certificates
     all_certs_pem = []
-    
+    saved_count = 0
+
     for i, cert in enumerate(certificates, 1):
         cert_data = cert.text
         if not cert_data:
             continue
-            
+
         pem = format_as_pem(cert_data, i)
+        subject = get_cert_subject(pem)
+
+        if subject != REQUIRED_SUBJECT:
+            print(f"  Skipping cert {i}: {subject}")
+            continue
+
+        saved_count += 1
         all_certs_pem.append(pem)
-        
+
         # Save individual certificate
-        filename = f"microsoft_federation_cert_{i}.pem"
+        filename = f"microsoft_federation_cert_{saved_count}.pem"
         with open(filename, 'w') as f:
             f.write(pem)
-        print(f"✓ Saved {filename}")
+        shutil.chown(filename, user='splunk', group='splunk')
+        print(f"✓ Saved {filename} ({subject})")
     
+    if not all_certs_pem:
+        print(f"\nNo certificates matched {REQUIRED_SUBJECT}")
+        sys.exit(1)
+
     # Save all certificates in one file (useful for Splunk)
     combined_filename = "microsoft_federation_certs_all.pem"
     with open(combined_filename, 'w') as f:
         f.write('\n'.join(all_certs_pem))
-    print(f"✓ Saved all certificates to {combined_filename}")
+    shutil.chown(combined_filename, user='splunk', group='splunk')
+    print(f"✓ Saved {saved_count} matching certificate(s) to {combined_filename}")
     
     print("\nDone! You can now use these PEM files in your Splunk configuration.")
     print(f"For Splunk SAML, typically use: {combined_filename}")
