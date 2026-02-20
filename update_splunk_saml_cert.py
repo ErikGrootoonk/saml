@@ -45,7 +45,7 @@ SPLUNK_RELOAD_ENDPOINT = f"{SPLUNK_REST_URL}/services/configs/conf-authenticatio
 
 # Optional: write log entries to this file in addition to stdout.
 # Set to None to log to stdout only.
-LOG_FILE = None
+LOG_FILE = '/var/log/saml_cert_update.log' 
 
 # ---------------------------------------------------------------------------
 DS_NS = "http://www.w3.org/2000/09/xmldsig#"
@@ -245,12 +245,12 @@ def main():
     write_splunk_cert(SPLUNK_CERT_PATH, pem_online)
 
     # 5. Reload Splunk authentication
-    if reload_splunk_auth(SPLUNK_RELOAD_ENDPOINT, SPLUNK_AUTH_TOKEN):
-        log("Splunk authentication reloaded successfully.")
-    else:
-        log("WARNING: Splunk reload may have failed — check Splunk logs.")
+    #if reload_splunk_auth(SPLUNK_RELOAD_ENDPOINT, SPLUNK_AUTH_TOKEN):
+    #   log("Splunk authentication reloaded successfully.")
+    #else:
+    #   log("WARNING: Splunk reload may have failed — check Splunk logs.")
 
-    log("=== Done ===")
+    #log("=== Done ===")
 
 
 if __name__ == "__main__":
