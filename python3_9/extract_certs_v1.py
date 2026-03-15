@@ -93,7 +93,6 @@ def main():
     print(f"Filtering for: {REQUIRED_SUBJECT}")
     
     # Filter and save certificates
-    all_certs_pem = []
     saved_count = 0
 
     for i, cert in enumerate(certificates, 1):
@@ -109,28 +108,18 @@ def main():
             continue
 
         saved_count += 1
-        all_certs_pem.append(pem)
 
         # Save individual certificate
         filename = f"microsoft_federation_cert_{saved_count}.pem"
         with open(filename, 'w') as f:
             f.write(pem)
-       # shutil.chown(filename, user='splunk', group='splunk')
+        shutil.chown(filename, user='splunk', group='splunk')
         print(f"✓ Saved {filename} ({subject})")
-    
-    if not all_certs_pem:
-        print(f"\nNo certificates matched {REQUIRED_SUBJECT}")
-        sys.exit(1)
+   
 
-    # Save all certificates in one file (useful for Splunk)
-    combined_filename = "microsoft_federation_certs_all.pem"
-    with open(combined_filename, 'w') as f:
-        f.write('\n'.join(all_certs_pem))
-#    shutil.chown(combined_filename, user='splunk', group='splunk')
-    print(f"✓ Saved {saved_count} matching certificate(s) to {combined_filename}")
+   
     
     print("\nDone! You can now use these PEM files in your Splunk configuration.")
-    print(f"For Splunk SAML, typically use: {combined_filename}")
 
 if __name__ == "__main__":
     main()
