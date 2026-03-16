@@ -10,23 +10,42 @@ import textwrap
 import sys
 import subprocess
 import shutil
+import logging
+import os
+from pathlib import Path
+
+IDP_CERT_DIR = "/splunk/etc/auth/idpCerts"
+LOG_FILE = "/var/log/splunk_saml_cert_update.log"
+
+def setup_logging():
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    file_handler = logging.FileHandler(LOG_FILE)
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+log = logging.getLogger(__name__)
 
 # Microsoft Federation Metadata URL
 METADATA_URL = "https://login.microsoftonline.com/common/federationmetadata/2007-06/federationmetadata.xml"
 
 def download_metadata(url):
     """Download the federation metadata XML"""
-    print(f"Downloading metadata from {url}...")
+    log.info(f"Downloading metadata from {url}")
     try:
         with urllib.request.urlopen(url) as response:
             return response.read()
     except Exception as e:
-        print(f"Error downloading metadata: {e}")
+        log.error(f"Error downloading metadata: {e}")
         sys.exit(1)
 
 def extract_certificates(xml_content):
     """Extract X509Certificates from the IDPSSODescriptor (SAML 2.0) element only"""
-    print("Parsing XML and extracting certificates from IDPSSODescriptor...")
+    log.info("Parsing XML and extracting certificates from IDPSSODescriptor")
 
     root = ET.fromstring(xml_content)
 
@@ -62,6 +81,12 @@ def format_as_pem(cert_data, cert_number):
 
 REQUIRED_SUBJECT = "subject=CN=accounts.accesscontrol.windows.net"
 
+def normalize_subject(subject):
+    """Normalize subject string by removing spaces around = signs (openssl output varies by version)"""
+    if subject is None:
+        return None
+    return subject.replace(' = ', '=').replace('= ', '=').replace(' =', '=')
+
 def get_cert_subject(pem_data):
     """Get the subject of a PEM certificate using openssl"""
     try:
@@ -74,25 +99,29 @@ def get_cert_subject(pem_data):
         if result.returncode == 0:
             return result.stdout.strip()
     except FileNotFoundError:
-        print("Error: openssl is required but not found in PATH")
+        log.error("openssl is required but not found in PATH")
         sys.exit(1)
     return None
 
 def main():
+    setup_logging()
+    log.info("=== Splunk SAML certificate update started ===")
+
+    # Ensure IDP cert directory exists
+    Path(IDP_CERT_DIR).mkdir(parents=True, exist_ok=True)
+
     # Download metadata
     xml_content = download_metadata(METADATA_URL)
-    
+
     # Extract certificates
     certificates = extract_certificates(xml_content)
-    
+
     if not certificates:
-        print("No certificates found in the metadata!")
+        log.error("No certificates found in the metadata!")
         sys.exit(1)
 
-    print(f"Found {len(certificates)} certificate(s)")
-    print(f"Filtering for: {REQUIRED_SUBJECT}")
-    
-    # Filter and save certificates
+    log.info(f"Found {len(certificates)} certificate(s), filtering for: {REQUIRED_SUBJECT}")
+
     saved_count = 0
 
     for i, cert in enumerate(certificates, 1):
@@ -103,23 +132,26 @@ def main():
         pem = format_as_pem(cert_data, i)
         subject = get_cert_subject(pem)
 
-        if subject != REQUIRED_SUBJECT:
-            print(f"  Skipping cert {i}: {subject}")
+        if normalize_subject(subject) != REQUIRED_SUBJECT:
+            log.info(f"Skipping cert {i}: {subject}")
             continue
 
         saved_count += 1
-
-        # Save individual certificate
         filename = f"microsoft_federation_cert_{saved_count}.pem"
+
+        # Save to current directory
         with open(filename, 'w') as f:
             f.write(pem)
         shutil.chown(filename, user='splunk', group='splunk')
-        print(f"✓ Saved {filename} ({subject})")
-   
+        log.info(f"Saved {filename} ({subject})")
 
-   
-    
-    print("\nDone! You can now use these PEM files in your Splunk configuration.")
+        # Copy to IDP cert directory
+        dest = os.path.join(IDP_CERT_DIR, filename)
+        shutil.copy2(filename, dest)
+        shutil.chown(dest, user='splunk', group='splunk')
+        log.info(f"Copied to {dest}")
+
+    log.info(f"=== Done: {saved_count} certificate(s) saved to {IDP_CERT_DIR} ===")
 
 if __name__ == "__main__":
     main()
